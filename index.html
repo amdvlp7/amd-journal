@@ -198,6 +198,12 @@ td,th,.stat strong,.risk-kpi strong{font-variant-numeric:tabular-nums}
 .jalali-calendar:before{content:"";position:absolute;inset:0;border-radius:inherit;pointer-events:none;background:linear-gradient(135deg,rgba(255,255,255,.55),transparent 38%);opacity:.6}[data-theme=dark] .jalali-calendar:before{opacity:.14}
 body:has(.jalali-calendar:not(.hidden)):after{content:"";position:fixed;inset:0;z-index:290;background:rgba(10,16,38,.3);-webkit-backdrop-filter:blur(6px);backdrop-filter:blur(6px)}
 .jalali-calendar-grid{grid-auto-rows:44px;align-items:center}.jalali-day{width:42px;height:42px;min-height:0;justify-self:center;border-radius:50%}.jalali-weekday{height:28px;min-height:0}
+
+/* v9 goals + reminder */
+.goal-row{margin:16px 0 4px}.goal-top{display:flex;justify-content:space-between;gap:10px;font-size:12.5px;margin-bottom:8px}.goal-top span{color:var(--muted);font-weight:700}.goal-top b{direction:rtl;font-weight:900}
+.bar.loss i{background:linear-gradient(90deg,#ffb0bc,var(--bad));box-shadow:0 0 12px color-mix(in srgb,var(--bad) 50%,transparent)}
+.reminder{display:flex;align-items:center;justify-content:space-between;gap:14px;flex-wrap:wrap;margin-bottom:16px;padding:16px 18px;border-radius:26px;background:linear-gradient(135deg,color-mix(in srgb,var(--accent) 20%,var(--glass-hi)),var(--glass));border:1px solid var(--edge);border-top-color:#fff9;-webkit-backdrop-filter:var(--blur);backdrop-filter:var(--blur);box-shadow:var(--shadow)}
+.reminder b{display:block;font-size:14px;font-weight:900}.reminder small{color:var(--muted);font-size:12px}.reminder-actions{display:flex;gap:8px}.reminder-actions .btn{min-height:40px;padding:6px 16px}
 </style>
 </head>
 <body>
@@ -261,7 +267,13 @@ body:has(.jalali-calendar:not(.hidden)):after{content:"";position:fixed;inset:0;
   <div class="stat"><label>سود / زیان خالص</label><strong id="sPnl">۰</strong></div>
   <div class="stat"><label>ضریب سود</label><strong id="sPf">—</strong><small class="muted">مجموع سودها ÷ مجموع زیان‌ها</small></div>
  </div>
- <div class="grid2">
+ <div id="backupReminder" class="reminder hidden"><div><b>وقت پشتیبان‌گیری است</b><small id="backupReminderText"></small></div><div class="reminder-actions"><button type="button" class="btn primary" id="backupNow">پشتیبان بگیر</button><button type="button" class="btn" id="backupLater">بعداً</button></div></div>
+<div class="panel" id="goalsPanel"><div class="chart-heading"><div><h3 id="goalsTitle">هدف ماهانه</h3><p class="note">سود هدف و سقف زیان همین ماه را تعیین کن؛ پیشرفتت از معاملات بسته‌شده‌ی این ماه محاسبه می‌شود.</p></div></div>
+<div class="formgrid"><div class="field"><label for="goalProfit">هدف سود ماه (USDT)</label><input id="goalProfit" type="number" inputmode="decimal" step="any" min="0" placeholder="مثلاً ۲۰۰"></div><div class="field"><label for="goalLoss">سقف زیان ماه (USDT)</label><input id="goalLoss" type="number" inputmode="decimal" step="any" min="0" placeholder="مثلاً ۱۰۰"></div></div>
+<div class="goal-row"><div class="goal-top"><span>پیشرفت سود</span><b id="goalProfitText">—</b></div><div class="bar"><i id="goalProfitBar" style="width:0%"></i></div></div>
+<div class="goal-row"><div class="goal-top"><span>مصرف سقف زیان</span><b id="goalLossText">—</b></div><div class="bar loss"><i id="goalLossBar" style="width:0%"></i></div></div>
+<p class="note" id="goalMessage"></p><div class="formactions"><button type="button" class="btn primary" id="goalSave">ذخیره‌ی هدف‌ها</button></div></div>
+<div class="grid2">
   <div class="panel"><h3>آخرین معاملات</h3><div class="tablewrap"><table><thead><tr><th>کوین</th><th>جهت</th><th>تاریخ</th><th>نتیجه</th><th>سود/زیان</th></tr></thead><tbody id="recentRows"></tbody></table></div></div>
   <div class="panel"><h3>نرخ برد هر کوین</h3><div id="coinBars" class="empty">هنوز معامله‌ای ثبت نشده است. از تب «ثبت پوزیشن» اولین معامله‌ات را ثبت کن.</div></div>
  </div>
@@ -449,6 +461,24 @@ function portalCal(c){if(c.parentElement!==document.body)document.body.appendChi
 function setAccent(a){document.documentElement.dataset.accent=a;try{localStorage.setItem('amd-accent',a)}catch(e){}document.querySelectorAll('.sw').forEach(b=>b.setAttribute('aria-pressed',String(b.dataset.accent===a)))}
 setAccent((()=>{try{return localStorage.getItem('amd-accent')||'indigo'}catch(e){return'indigo'}})());
 document.addEventListener('click',e=>{let b=e.target.closest('.sw');if(b)setAccent(b.dataset.accent)});
+function goalKey(){return 'amd-goals-'+(user?.id||'guest')}
+function readGoals(){try{return JSON.parse(localStorage.getItem(goalKey())||'{}')}catch(e){return{}}}
+function renderGoals(){if(!$('goalsPanel'))return;let g=readGoals(),p=jalaliPartsFromIso(localIsoDate()),from=jalaliToIso(p.jy,p.jm,1),to=jalaliToIso(p.jy,p.jm,jalaliDaysInMonth(p.jy,p.jm));
+$('goalsTitle').textContent='هدف ماهانه — '+JALALI_MONTH_NAMES[p.jm-1]+' '+persianDigits(p.jy);
+let sum=trades.filter(t=>pnl(t)!==null&&(t.close_date||t.open_date)>=from&&(t.close_date||t.open_date)<=to).reduce((x,t)=>x+pnl(t),0);
+if(document.activeElement!==$('goalProfit'))$('goalProfit').value=g.profit||'';if(document.activeElement!==$('goalLoss'))$('goalLoss').value=g.loss||'';
+let gp=num(g.profit),gl=num(g.loss),pp=gp>0?Math.max(0,sum)/gp*100:0,lp=gl>0?Math.max(0,-sum)/gl*100:0;
+$('goalProfitBar').style.width=Math.min(100,pp)+'%';$('goalLossBar').style.width=Math.min(100,lp)+'%';
+$('goalProfitText').textContent=gp>0?fmt(Math.max(0,sum))+' از '+fmt(gp)+' USDT ('+pct(pp)+')':'هدفی ثبت نشده';
+$('goalLossText').textContent=gl>0?fmt(Math.max(0,-sum))+' از '+fmt(gl)+' USDT ('+pct(lp)+')':'سقفی ثبت نشده';
+let m=$('goalMessage');m.className='note';m.textContent='';
+if(gl>0&&lp>=100){m.className='note loss';m.textContent='سقف زیان این ماه پر شد؛ بهتر است تا ماه بعد معامله‌ی جدید باز نکنی.'}else if(gp>0&&pp>=100){m.className='note win';m.textContent='هدف سود این ماه محقق شد. خسته نباشی!'}else if(gl>0&&lp>=70){m.className='note loss';m.textContent='بیش از ۷۰٪ سقف زیان ماه مصرف شده؛ با احتیاط‌تر معامله کن.'}
+let last=Number(localStorage.getItem('amd-last-backup')||0),snooze=Number(localStorage.getItem('amd-backup-snooze')||0),days=last?Math.floor((Date.now()-last)/864e5):null,show=trades.length>0&&Date.now()>snooze&&(days===null||days>=7);
+$('backupReminder').classList.toggle('hidden',!show);if(show)$('backupReminderText').textContent=days===null?'هنوز پشتیبان‌گیری نکرده‌ای.':fmt(days)+' روز از آخرین پشتیبان‌گیری گذشته.'}
+$('goalSave').addEventListener('click',()=>{let g={profit:Math.max(0,num($('goalProfit').value)),loss:Math.max(0,num($('goalLoss').value))};try{localStorage.setItem(goalKey(),JSON.stringify(g))}catch(e){}toast('هدف‌ها ذخیره شد.','success');renderGoals()});
+$('backupNow').addEventListener('click',()=>$('backupJsonBtn').click());$('backupLater').addEventListener('click',()=>{try{localStorage.setItem('amd-backup-snooze',String(Date.now()+2*864e5))}catch(e){}renderGoals()});
+$('backupJsonBtn').addEventListener('click',()=>{try{localStorage.setItem('amd-last-backup',String(Date.now()))}catch(e){}renderGoals()});
+{const _render=render;render=function(){_render.apply(this,arguments);try{renderGoals()}catch(e){}}}
 let installEvt=null;addEventListener('beforeinstallprompt',e=>{e.preventDefault();installEvt=e});addEventListener('appinstalled',()=>{$('installBtn').classList.add('hidden');toast('برنامه نصب شد.','success')});
 if(matchMedia('(display-mode: standalone)').matches||navigator.standalone)$('installBtn').classList.add('hidden');
 $('installBtn').addEventListener('click',async()=>{if(installEvt){installEvt.prompt();try{await installEvt.userChoice}catch(e){}installEvt=null;return}const ios=/iphone|ipad|ipod/i.test(navigator.userAgent);$('installSteps').innerHTML=ios?'<li>این صفحه را در <b>Safari</b> باز کن (نه داخل مرورگر برنامه‌ها).</li><li>دکمه‌ی اشتراک‌گذاری (مربع با فلش رو به بالا) را بزن.</li><li>گزینه‌ی <b>Add to Home Screen</b> را انتخاب کن و تأیید کن.</li>':'<li>منوی سه‌نقطه‌ی مرورگر (⋮) را باز کن.</li><li>گزینه‌ی <b>Install app</b> یا <b>Add to Home screen</b> را بزن.</li><li>تأیید کن؛ آیکون برنامه به صفحه‌ی اصلی اضافه می‌شود.</li>';$('installModal').classList.remove('hidden')});
