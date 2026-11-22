@@ -1,4 +1,5 @@
 {
+ "id": "./",
  "name": "AMD Journal",
  "short_name": "AMD Journal",
  "description": "ژورنال و تحلیل معاملات",
@@ -9,7 +10,7 @@
  "display": "standalone",
  "orientation": "portrait",
  "background_color": "#e9eefb",
- "theme_color": "#5a67ff",
+ "theme_color": "#e9eefb",
  "icons": [
   {
    "src": "icon-192.png",
